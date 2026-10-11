@@ -5,7 +5,7 @@ import json
 from collections.abc import Mapping
 from datetime import timedelta
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
@@ -29,9 +29,21 @@ class SimulateSettings(_Section):
     n_paths: int = Field(default=2000, gt=0)
 
 
+class M5Settings(_Section):
+    tenant_id: str = "m5"
+    # M5 has no costs: unit_cost = sell_price * (1 - gross margin). Assumed values.
+    gross_margin_by_category: dict[str, Annotated[float, Field(gt=0, lt=1)]] = {
+        "FOODS": 0.25,
+        "HOUSEHOLD": 0.35,
+        "HOBBIES": 0.40,
+    }
+    default_gross_margin: float = Field(default=0.30, gt=0, lt=1)
+
+
 class Settings(_Section):
     asof: AsOfSettings = AsOfSettings()
     simulate: SimulateSettings = SimulateSettings()
+    m5: M5Settings = M5Settings()
 
     @property
     def config_hash(self) -> str:

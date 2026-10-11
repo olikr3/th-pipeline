@@ -5,3 +5,12 @@ asof:
 
 simulate:
   n_paths: 2000
+
+m5:
+  tenant_id: m5
+  # M5 has no costs: unit_cost = sell_price * (1 - gross margin). Assumed values.
+  gross_margin_by_category:
+    FOODS: 0.25
+    HOUSEHOLD: 0.35
+    HOBBIES: 0.40
+  default_gross_margin: 0.30
