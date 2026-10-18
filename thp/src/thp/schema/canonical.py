@@ -123,3 +123,45 @@ PRICE = TableSchema(
     },
     key=("tenant_id", "sku_id", "location_id", "valid_from"),
 )
+
+# Demand quantiles every forecast carries, and their column names.
+QUANTILES = (0.05, 0.10, 0.25, 0.50, 0.75, 0.90, 0.95)
+QUANTILE_COLS = tuple(f"q{round(q * 100):02d}" for q in QUANTILES)
+
+# Forecasts from another source (a merchant's planning tool, an ERP), as issued.
+# A fact dated by issued_date: an as_of before the issue cannot see it. Any of
+# qty (the source's point forecast) and the quantiles may be null, but each row
+# needs qty or q50.
+EXTERNAL_FORECAST = TableSchema(
+    name="external_forecast",
+    columns={
+        "tenant_id": _STR,
+        "source": _STR,
+        "sku_id": _STR,
+        "location_id": _STR,
+        "issued_date": _DATE,
+        "week_end": _DATE,  # last day of the target week, in the tenant's weeks
+        "qty": _NUM,
+        **{col: _NUM for col in QUANTILE_COLS},
+        "ingested_at": _TS,
+    },
+    key=("tenant_id", "source", "sku_id", "location_id", "issued_date", "week_end"),
+)
+
+# Written by the engine: demand quantiles per series for the weeks after as_of's
+# last complete week (horizon_week 1 ends 7 days after it).
+FORECAST = TableSchema(
+    name="forecast",
+    columns={
+        "tenant_id": _STR,
+        "model_version": _STR,
+        "sku_id": _STR,
+        "location_id": _STR,
+        "as_of": _DATE,
+        "horizon_week": pl.Int16(),
+        "week_end": _DATE,
+        **{col: _NUM for col in QUANTILE_COLS},
+        "is_cold_start": pl.Boolean(),
+    },
+    key=("tenant_id", "model_version", "sku_id", "location_id", "as_of", "horizon_week"),
+)

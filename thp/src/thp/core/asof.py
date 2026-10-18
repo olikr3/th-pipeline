@@ -19,6 +19,7 @@ FACT_EVENT_COLS: dict[str, str] = {
     "price": "valid_from",
     "stock_snapshot": "snapshot_date",
     "purchase_order": "order_date",
+    "external_forecast": "issued_date",
 }
 
 REFERENCE_TABLES: frozenset[str] = frozenset({"tenant", "location", "sku", "supplier"})
