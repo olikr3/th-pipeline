@@ -3,6 +3,13 @@ asof:
   # null disables the ingested_at filter (backfilled sources such as M5).
   ingest_grace_days: null
 
+demand:
+  horizon_weeks: 13
+  # Trailing weeks of baseline forecast errors that set the quantile spread.
+  residual_weeks: 52
+  # External forecasts issued longer ago than this before as_of are ignored.
+  external_max_age_days: 35
+
 simulate:
   n_paths: 2000
 

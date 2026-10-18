@@ -9,12 +9,13 @@ Quantities are kept in units. Scaling by the series level is the model's job.
 """
 
 import math
-from datetime import date, timedelta
+from datetime import date
 from pathlib import Path
 
 import polars as pl
 
 from thp.core.asof import AsOfStore
+from thp.core.weeks import last_complete_week_end, week_end
 
 FEATURE_VERSION = "demand_v1"
 
@@ -32,12 +33,6 @@ ADI_CUTOFF = 1.32
 CV2_CUTOFF = 0.49
 
 DEFAULT_WEEK_START = 1  # ISO Monday, when the tenant row does not say
-
-
-def last_complete_week_end(as_of: date, week_start: int) -> date:
-    """The last day of the latest week that ends on or before ``as_of``."""
-    offset = (as_of.isoweekday() - week_start) % 7
-    return as_of if offset == 6 else as_of - timedelta(days=offset + 1)
 
 
 def syntetos_boylan(adi: pl.Expr, cv2: pl.Expr) -> pl.Expr:
@@ -58,10 +53,7 @@ def syntetos_boylan(adi: pl.Expr, cv2: pl.Expr) -> pl.Expr:
 
 
 def build_demand_features(store: AsOfStore) -> pl.DataFrame:
-    week_start = _week_start(store)
-    last_end = last_complete_week_end(store.as_of, week_start)
-
-    panel = _dense_weeks(_weekly_sales(store, week_start, last_end), last_end)
+    panel, _ = weekly_demand(store)
     panel = _with_prices(panel, store)
     panel = panel.sort(*SERIES, "week_end")
     panel = _with_series_features(panel)
@@ -83,19 +75,25 @@ def write_demand_features(store: AsOfStore, out_root: Path, *, latest_only: bool
     return path / f"{name}.parquet"
 
 
-def _week_start(store: AsOfStore) -> int:
+def weekly_demand(store: AsOfStore) -> tuple[pl.DataFrame, date]:
+    """Dense weekly sales per series up to the last complete week, and that week's end."""
+    week_start = tenant_week_start(store)
+    last_end = last_complete_week_end(store.as_of, week_start)
+    return _dense_weeks(_weekly_sales(store, week_start, last_end), last_end), last_end
+
+
+def tenant_week_start(store: AsOfStore) -> int:
     rows = store.reference("tenant").select("week_start").collect()["week_start"]
     value = rows[0] if len(rows) else None
     return DEFAULT_WEEK_START if value is None else int(value)
 
 
 def _weekly_sales(store: AsOfStore, week_start: int, last_end: date) -> pl.DataFrame:
-    days_into_week = (pl.col("date").dt.weekday() - week_start + 7) % 7
     discount = pl.col("discount")
     return (
         store.facts("sales")
         .filter(pl.col("date") <= last_end)
-        .with_columns(week_end=pl.col("date") + pl.duration(days=6 - days_into_week))
+        .with_columns(week_end=week_end(pl.col("date"), week_start))
         .group_by(*SERIES, "week_end")
         .agg(
             qty=pl.col("qty").sum(),

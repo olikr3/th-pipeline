@@ -9,9 +9,9 @@ from hypothesis import strategies as st
 from polars.testing import assert_frame_equal
 
 from thp.core.asof import AsOfStore
+from thp.core.weeks import last_complete_week_end
 from thp.features.demand import (
     build_demand_features,
-    last_complete_week_end,
     syntetos_boylan,
     write_demand_features,
 )

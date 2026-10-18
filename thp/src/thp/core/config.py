@@ -25,6 +25,14 @@ class AsOfSettings(_Section):
         return timedelta(days=self.ingest_grace_days)
 
 
+class DemandSettings(_Section):
+    horizon_weeks: int = Field(default=13, gt=0, le=52)
+    # Trailing weeks of baseline forecast errors that set the quantile spread.
+    residual_weeks: int = Field(default=52, gt=0)
+    # External forecasts issued longer ago than this before as_of are ignored.
+    external_max_age_days: int = Field(default=35, ge=0)
+
+
 class SimulateSettings(_Section):
     n_paths: int = Field(default=2000, gt=0)
 
@@ -42,6 +50,7 @@ class M5Settings(_Section):
 
 class Settings(_Section):
     asof: AsOfSettings = AsOfSettings()
+    demand: DemandSettings = DemandSettings()
     simulate: SimulateSettings = SimulateSettings()
     m5: M5Settings = M5Settings()
 
