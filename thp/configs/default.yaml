@@ -12,6 +12,16 @@ demand:
 
 simulate:
   n_paths: 2000
+  # Gaussian copula (theory/copula.md): shares of each SKU-week's latent variance
+  # from the merchant shock, the category shock and the SKU's persistent level.
+  # The rest is noise per SKU-week, so they must sum to less than 1.
+  # rho_sku and sku_persistence are assumptions until estimated from PIT values.
+  rho_merchant: 0.15
+  rho_category: 0.10
+  rho_sku: 0.20
+  # AR(1) week-to-week persistence of the shared shocks and of the SKU level.
+  shock_persistence: 0.7
+  sku_persistence: 0.9
 
 m5:
   tenant_id: m5

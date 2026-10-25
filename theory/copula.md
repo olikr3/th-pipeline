@@ -33,8 +33,10 @@ So the correlation is created on the normal scale, where it is easy, and then ca
 x doesn't use a full correlation matrix Σ but a factor structure:
 
 ```
-x[i,t] = √ρm · zm[t] + √ρc · zc[c(i),t] + √(1−ρm−ρc) · ε[i,t]
+x[i,t] = √ρm · zm[t] + √ρc · zc[c(i),t] + √ρs · zs[i,t] + √(1−ρm−ρc−ρs) · ε[i,t]
 ```
+
+zs is each SKU's own persistent level error, AR(1) with φs = 0.9; it ties a SKU's weeks to each other but not to other SKUs.
 
 The correlation matrix this implies:
 
@@ -43,7 +45,7 @@ The correlation matrix this implies:
 | two SKUs, same category, same week | ρm + ρc = 0.25 |
 | two SKUs, different categories, same week | ρm = 0.15 |
 | any two SKUs, k weeks apart | the above × φᵏ (shocks decay at 0.7 per week) |
-| same SKU, k weeks apart | (ρm + ρc) · φᵏ, only through the shocks (gap 1 in the overview: no SKU-level persistence yet) |
+| same SKU, k weeks apart | (ρm + ρc) · φᵏ + ρs · φsᵏ (shared shocks plus the SKU's own level) |
 
 ## What ρ means, and what it doesn't
 
