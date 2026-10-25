@@ -38,4 +38,4 @@ Correlation could be modelled directly with a 200 × 200 correlation matrix per 
 
 Persisting the shocks across weeks (AR(1)) applies the same idea along the time axis. A bad season lasts several weeks rather than flipping each week, so a bad path stays bad long enough to matter by day 90.
 
-That is also the reason for the proposed per-SKU persistent component (gap 1 in [the overview](cash-conversion-simulator.md)). Within one SKU, nothing currently ties week 1 to week 2 except these shared shocks. If a SKU's forecast is simply too high, it stays too high every week, and that error doesn't cancel out across weeks either. It's the same argument, applied to a single SKU over time.
+That is also the reason for the per-SKU persistent component zs (gap 1 in [the overview](cash-conversion-simulator.md), now in `copula.py`). Without it, nothing would tie one SKU's week 1 to its week 2 except the shared shocks. If a SKU's forecast is simply too high, it stays too high every week, and that error doesn't cancel out across weeks either. It's the same argument, applied to a single SKU over time.

@@ -5,10 +5,10 @@ import json
 from collections.abc import Mapping
 from datetime import timedelta
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Self
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class _Section(BaseModel):
@@ -35,6 +35,21 @@ class DemandSettings(_Section):
 
 class SimulateSettings(_Section):
     n_paths: int = Field(default=2000, gt=0)
+    # Gaussian copula (theory/copula.md): shares of each SKU-week's latent variance
+    # from the merchant shock, the category shock and the SKU's persistent level.
+    # The rest is noise per SKU-week, so they must sum to less than 1.
+    rho_merchant: float = Field(default=0.15, ge=0, lt=1)
+    rho_category: float = Field(default=0.10, ge=0, lt=1)
+    rho_sku: float = Field(default=0.20, ge=0, lt=1)
+    # AR(1) week-to-week persistence of the shared shocks and of the SKU level.
+    shock_persistence: float = Field(default=0.7, ge=0, lt=1)
+    sku_persistence: float = Field(default=0.9, ge=0, lt=1)
+
+    @model_validator(mode="after")
+    def _noise_share_positive(self) -> Self:
+        if self.rho_merchant + self.rho_category + self.rho_sku >= 1:
+            raise ValueError("rho_merchant + rho_category + rho_sku must be below 1")
+        return self
 
 
 class M5Settings(_Section):

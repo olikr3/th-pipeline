@@ -12,6 +12,7 @@ dependencies = [
     "polars>=2.0.0",
     "pydantic>=2.14.0",
     "pyyaml>=6.0.3",
+    "scipy>=1.18.1",
 ]
 
 [project.scripts]
@@ -28,6 +29,7 @@ dev = [
     "pre-commit>=4.6.2",
     "pytest>=9.1.1",
     "ruff>=0.17.0",
+    "scipy-stubs>=1.18.1.1",
     "types-pyyaml>=6.0.12.20260906",
 ]
 
