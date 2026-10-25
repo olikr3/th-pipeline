@@ -37,6 +37,10 @@ Steps 2 and 3 are where the forecasts enter.
 
 ## Step 2: correlated uniforms (Gaussian copula)
 
+For every random draw, a worked example over two paths and the seeding scheme, see [the draw logic](simulator-draws.md).
+For why the shared shocks are needed at all, see [why shocks](why-shocks.md).
+For what the copula is, how ρ is estimated and its tail weakness, see [the copula](copula.md).
+
 For SKU *i* in category *c*, week *t*, path *n*:
 
 ```
