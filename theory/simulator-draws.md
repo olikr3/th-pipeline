@@ -15,7 +15,7 @@ For one lot with N paths, S SKUs, C categories and W weeks:
 | zs, SKU level | `[N, S, W]` | N(0,1), AR(1) over weeks, slowly decaying | how far this SKU's forecast level is off in this future |
 | ε, idiosyncratic noise | `[N, S, W]` | N(0,1), independent | everything specific to one SKU-week |
 | receipt week | `[N]` | lead-time distribution around the PO's expected receipt | when the goods arrive; one per path, since the PO arrives as one delivery |
-| receivable delay | `[N]` | per the B2B payment-delay distribution | how late B2B customers pay |
+| receivable delay | `[N]` | per the B2B payment-delay distribution | how late B2B customers pay (not built yet: needs receivables data, Phase 3+) |
 
 **Not drawn, but computed from the path's state:**
 
@@ -72,12 +72,12 @@ Across all 2,000 paths, each SKU-week's demand still follows its forecast exactl
 
 With demand `[N, S, W]` in hand, each path n runs week by week:
 
-1. Lot stock is 0 before `receipt_week[n]`, and the full lot quantity from then on.
+1. Lot stock is 0 before `receipt_week[n]`, and the full lot quantity from then on. Goods arriving during a week sell from the next full week.
 2. Sales = min(demand, available). Older stock sells first, then lot stock.
-3. Markdown check: if lot stock is older than 12 weeks or cover exceeds 26 weeks, the price drops, and from the next week demand is multiplied by (price ratio)^−1.5.
+3. Markdown check: if lot stock is older than 12 weeks or cover exceeds 26 weeks, the price drops by 20% of list price, at most once per 4 weeks and to at most 50% off, and that week's demand is multiplied by (price ratio)^−1.5.
 4. Cash = lot units sold × price × (1 − return rate). The B2B share moves later by `delay[n]`.
 
-At the end, cumulative cash at days 30/60/90 ÷ lot cost gives one cash_ratio per path. That makes 2,000 numbers per tenor, and their quantiles are the output.
+At the end, cumulative cash over the T days from disbursement ÷ lot cost gives one cash_ratio per path and tenor ([the tenor clock](tenor-clock.md)). That makes 2,000 numbers per tenor, and their quantiles are the output.
 
 ## Seeding: repeatable and order-independent
 
@@ -89,7 +89,7 @@ Every draw type gets its own substream from `make_rng(seed, *stream)` ([ADR 0001
 | zc | `(seed, CATEGORY, key(category))` |
 | zs | `(seed, SKU_LEVEL, key(sku, location))` |
 | ε | `(seed, NOISE, key(sku, location))` |
-| receipt, delay | `(seed, RECEIPT)`, `(seed, DELAY)` |
+| receipt | `(seed, RECEIPT)` |
 
 What this buys:
 

@@ -4,7 +4,7 @@ from typing import Any
 
 import polars as pl
 import pytest
-from hypothesis import given, settings
+from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 from polars.testing import assert_frame_equal
 
@@ -234,6 +234,7 @@ def test_rows_do_not_change_when_later_data_arrives(
     root: Path, panel: pl.DataFrame, weeks: int, days: int
 ) -> None:
     as_of = START + timedelta(weeks=weeks, days=days)
+    assume(as_of <= AS_OF)  # week 20 + 6 days would complete a week the panel lacks
     earlier = _build(root, as_of)
     expected = panel.filter(pl.col("week_end") <= last_complete_week_end(as_of, 1))
     assert_frame_equal(earlier, expected)

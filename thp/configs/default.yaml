@@ -12,6 +12,17 @@ demand:
 
 simulate:
   n_paths: 2000
+  # Lognormal spread of the lead time around the expected receipt (median).
+  receipt_sigma: 0.3
+  markdown:
+    # A SKU with lot stock is marked down when the lot is older than age_weeks or
+    # its stock covers more than cover_weeks of median demand.
+    age_weeks: 12
+    cover_weeks: 26.0
+    step: 0.20  # price cut per markdown, of list price
+    max_total: 0.50  # deepest total cut
+    interval_weeks: 4  # at most one step per interval
+    elasticity: -1.5  # demand x (price ratio) ** elasticity
   # Gaussian copula (theory/copula.md): shares of each SKU-week's latent variance
   # from the merchant shock, the category shock and the SKU's persistent level.
   # The rest is noise per SKU-week, so they must sum to less than 1.
