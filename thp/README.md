@@ -4,7 +4,10 @@ The inventory risk engine: canonical data, demand features, demand forecasts, an
 
 ## Setup
 
+Run everything from this directory (`thp/`), where the `uv` project lives. From the repo root, use `uv run --project thp thp ...` instead.
+
 ```
+cd thp
 uv sync
 uv run pytest          # also: uv run ruff check, uv run ruff format --check, uv run mypy
 ```
