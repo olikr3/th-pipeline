@@ -1,0 +1,4 @@
+# uv workspace root, so `uv run thp ...` works from the repo root as well as from thp/.
+# Virtual: no package of its own. The lockfile and .venv live here.
+[tool.uv.workspace]
+members = ["thp"]

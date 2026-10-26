@@ -6,6 +6,11 @@ resolution-markers = [
     "python_full_version < '3.15'",
 ]
 
+[manifest]
+members = [
+    "thp",
+]
+
 [[package]]
 name = "annotated-types"
 version = "0.8.0"
@@ -889,7 +894,7 @@ wheels = [
 [[package]]
 name = "thp"
 version = "0.1.0"
-source = { editable = "." }
+source = { editable = "thp" }
 dependencies = [
     { name = "numpy" },
     { name = "polars" },
