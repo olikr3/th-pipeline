@@ -54,6 +54,7 @@ Each external row needs a point forecast (`qty`) or a median (`q50`); any other 
 
 ## Consequences
 
+- A lot whose lines lack any forecast week its tenor needs is refused by the simulator (`MissingForecastError` in `thp/src/thp/simulate/inputs.py`), not filled from the baseline or another source. A source that forecasts fewer weeks than the longest tenor needs can only score shorter tenors.
 - Rows that still miss a quantile after filling are skipped and reported. In practice these are SKUs without sales history when the source sends a point forecast only. New SKUs are therefore covered only by sources that send every quantile.
 - External forecasts must be weekly. Daily or monthly forecasts have to be converted before ingest, because quantiles cannot be summed across periods. Any date in the target week is accepted and mapped to the tenant's week end.
 - Ingest rejects a whole file on any invalid row (no centre, negative value, decreasing quantiles, a repeated series and week). The spec's quarantine-and-report validation can replace this when the CSV/Excel connector is built (Milestone 8).

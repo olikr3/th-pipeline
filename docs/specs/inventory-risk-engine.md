@@ -166,10 +166,11 @@ Creates labeled training and evaluation lots before any real loan exists: every 
 1. **Historical POs** (merchant data): every real `purchase_order` with receipt date at least tenor + 13 weeks before the latest data becomes a lot.
 2. **Synthetic POs** (M5 sandbox, which has no POs): simulate ordering behavior per SKU with an order-up-to policy, `order_qty = max(0, S − inventory_position)`, where `S = μ_LT+R × k` and the bias factor k is drawn from a distribution per merchant profile (disciplined k \~ U(0.9, 1.2), average k \~ U(1.0, 1.6), overbuyer k \~ U(1.4, 2.5)). Review period R = 4 weeks, lead time from a lognormal around 6 weeks. A lot groups the SKU lines ordered in one store in one week.
 
-**Realized label for a lot with tenor T, received at r:**
+**Realized label for a lot with tenor T, disbursed at d** (the tenor counts from disbursement; see the decision below):
 
 - Allocate sales FIFO: units of the lot are sold only after earlier stock of the same SKU at that location is sold.
-- `cash_realized(T) = Σ sold_units_from_lot × net_price × (1 − return_rate)`, shifted by the receivable delay for B2B sales where known.
+- `cash_realized(T) = Σ sold_units_from_lot × net_price × (1 − return_rate)` over the T days from d, shifted by the receivable delay for B2B sales where known.
+- Two variants per synthetic M5 lot: PO financing (d = order date, lead time counts against the tenor) and stock financing (d = receipt date).
 - `cash_ratio(T) = cash_realized(T) ÷ lot_cost`, computed for T = 30, 60, 90 days.
 - Also store `unsold_value(T)` at cost for the liquidation analysis.
 
@@ -435,6 +436,7 @@ Milestones 1–7 map to weeks 1–10 of the build plan; 8–9 to Phase 2; 10–1
 
 - [ ] Granularity: weekly only, or daily demand for fast movers? (Default weekly; revisit if lots with 30-day tenor need finer resolution.)
 - [ ] Quantile set vs full sample output from the demand model: are seven quantiles enough for the tail, or train a distributional model (e.g. negative binomial with LightGBM-predicted parameters)?
+- [x] Tenor clock: does a lot's tenor count from disbursement or from receipt? The pseudo-loan labels count from receipt, while the simulator starts at the order date with a 13-week forecast, and both must use the same clock for validation. (Decided 2026-10-25: always from disbursement. PO financing disburses at the order date and draws the receipt week; stock financing disburses at or after receipt with no receipt draw. Labels follow the same rule, and synthetic M5 lots are generated in both variants. See [theory/tenor-clock.md](../../theory/tenor-clock.md).)
 - [ ] Copula correlations: estimate per tenant or pool across tenants? Pooling is more stable but may understate idiosyncratic risk.
 - [ ] Elasticity: fixed category defaults or estimated from `markdown_event`? Depends on how much markdown history merchants have.
 - [ ] Prefect vs cron + job table for Phase 2: Prefect adds a service to run; cron is enough below \~10 tenants.

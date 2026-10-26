@@ -33,8 +33,22 @@ class DemandSettings(_Section):
     external_max_age_days: int = Field(default=35, ge=0)
 
 
+class MarkdownSettings(_Section):
+    # A SKU with lot stock is marked down when the lot is older than age_weeks or
+    # its stock covers more than cover_weeks of median demand.
+    age_weeks: int = Field(default=12, ge=0)
+    cover_weeks: float = Field(default=26.0, gt=0)
+    step: float = Field(default=0.20, gt=0, lt=1)  # price cut per markdown, of list price
+    max_total: float = Field(default=0.50, gt=0, lt=1)  # deepest total cut
+    interval_weeks: int = Field(default=4, gt=0)  # at most one step per interval
+    elasticity: float = Field(default=-1.5, le=0)  # demand x (price ratio) ** elasticity
+
+
 class SimulateSettings(_Section):
     n_paths: int = Field(default=2000, gt=0)
+    # Lognormal spread of the lead time around the expected receipt (median).
+    receipt_sigma: float = Field(default=0.3, ge=0)
+    markdown: MarkdownSettings = MarkdownSettings()
     # Gaussian copula (theory/copula.md): shares of each SKU-week's latent variance
     # from the merchant shock, the category shock and the SKU's persistent level.
     # The rest is noise per SKU-week, so they must sum to less than 1.

@@ -1,5 +1,7 @@
 # Cash-conversion simulator: how it works
 
+For what the engine is for as a whole, start with [what the engine solves](what-the-engine-solves.md).
+
 How the Monte Carlo simulator in the [technical spec](../docs/specs/inventory-risk-engine.md) ("Cash-conversion simulator") turns demand forecasts into a cash-ratio distribution, with the sampling step in detail. It assumes forecasts are already provided: the `forecast` table from any source (baseline or external, see [ADR 0002](../docs/adr/0002-baseline-and-external-forecasts.md)).
 
 ## What goes in and what comes out
@@ -113,9 +115,9 @@ Demand × (p_new/p_old)^elasticity. With elasticity −1.5, a 20% markdown gives
 ## Gaps in the spec to decide before building
 
 1. **No persistence within a SKU (the most important one).** ε is independent per week, so one SKU's 13 weekly draws only move together through the shared shocks. The forecast's real errors are mostly *level* errors: if a SKU is overforecast, it's overforecast every week. Summing independent weeks shrinks the relative spread of 13-week cumulative demand by roughly 1/√13. That narrows the cash_ratio distribution, which inflates q05 and over-advances, worst on small lots dominated by a few SKUs. **Fix:** add a persistent per-SKU component, `x = √ρm·zm + √ρc·zc + √ρs·zs[i] + √(1−ρm−ρc−ρs)·ε`, with zs AR(1) per SKU. Estimate ρs from the autocorrelation of PIT values within each series. PIT (probability integral transform) means where the actual sale fell within the forecast distribution. **Status:** implemented in `thp/src/thp/simulate/copula.py` with assumed defaults ρs = 0.20 and φs = 0.9, until they can be estimated.
-2. **The tenor clock vs the 13-week horizon.** The pseudo-loan labels count the tenor *from receipt*, and lead time is about 6 weeks. If the simulator also starts at receipt, day 90 falls around week 19, past the forecast horizon. Either count the tenor from the advance (order) date, or extend the forecasts, e.g. horizon 26 or repeating the last weeks. This must match the label definition, or the validation compares different things.
-3. **Missing weeks from external sources.** ADR 0002 leaves weeks the source didn't forecast empty. The simulator needs a rule: fill them from the baseline (simplest) or refuse the lot. Proposed: fill from the baseline and flag the lot's share of filled demand as an underwriting input.
-4. **Mapping days to weeks.** Day 30 is week 4.3. Interpolate cumulative cash linearly within the week, rather than rounding to week 4 or 5, which shifts cash_ratio_30 noticeably.
+2. **The tenor clock vs the 13-week horizon.** The pseudo-loan labels count the tenor *from receipt*, and lead time is about 6 weeks. If the simulator also starts at receipt, day 90 falls around week 19, past the forecast horizon. Either count the tenor from the advance (order) date, or extend the forecasts, e.g. horizon 26 or repeating the last weeks. This must match the label definition, or the validation compares different things. **Decided:** the tenor counts from disbursement; see [the tenor clock](tenor-clock.md).
+3. **Missing weeks from external sources.** ADR 0002 leaves weeks the source didn't forecast empty. The simulator needs a rule: fill them from the baseline (simplest) or refuse the lot. **Decided:** refuse the lot. `forecast_knots` in `thp/src/thp/simulate/inputs.py` raises `MissingForecastError` listing the missing series-weeks.
+4. **Mapping days to weeks.** Day 30 is week 4.3. Interpolate cumulative cash linearly within the week, rather than rounding to week 4 or 5, which shifts cash_ratio_30 noticeably. **Implemented** in the engine: a tenor ending mid-week gets that fraction of the week's cash.
 5. **The ρ estimates need forecast history.** ρm, ρc (and ρs) come from PIT values of matured forecasts. With externally provided forecasts, that requires issues kept over time. ADR 0002's append-only `external_forecast` table already allows it. Until then the defaults apply, and the backtest coverage check (realised below q05 in 3–7% of lots) is what tells you if they're wrong.
 
 ## Proposed build order (`simulate/`)

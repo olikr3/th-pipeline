@@ -41,6 +41,7 @@ class Stream(IntEnum):
     CATEGORY = 1
     SKU_LEVEL = 2
     NOISE = 3
+    RECEIPT = 4
 
 
 def stream_key(name: str) -> int:

@@ -68,4 +68,5 @@ src/thp/
   ingest/    M5 connector, external forecast ingest
   features/  weekly demand features
   demand/    seasonal-naive baseline, external forecasts, forecast output
+  simulate/  cash-conversion simulator: demand sampling, copula, engine, inputs
 ```
