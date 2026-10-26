@@ -58,6 +58,6 @@ So clock B is just clock A for stock financing. "From receipt" is right only whe
 
 ## What it means for the engine
 
-The input is a lot with `as_of`, `disbursement_date` and a flag (or an empty receipt distribution) for goods on hand. Tenor end dates are computed from disbursement. The 13-week forecast covers 90 days from any disbursement at or near `as_of`, which is true for both products.
+The input is a lot with `as_of`, `disbursement_date` and a flag (or an empty receipt distribution) for goods on hand. Tenor end dates are computed from disbursement. A 90-day tenor from a disbursement late in the week reaches into a 14th forecast week, so the default horizon is 14 weeks, not the spec's 13 (see `observations/wrong-assumptions.md`).
 
 **Status:** decided 2026-10-25: the tenor counts from disbursement. Implemented in `thp/src/thp/simulate/engine.py` (`Lot.disbursement_date`; `expected_receipt_date=None` for goods on hand). The spec's pseudo-loan label was changed to match.

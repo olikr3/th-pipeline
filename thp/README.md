@@ -1,6 +1,6 @@
 # thp
 
-The inventory risk engine: canonical data, demand features and demand forecasts. See the [technical spec](../docs/specs/inventory-risk-engine.md) and the [ADRs](../docs/adr/).
+The inventory risk engine: canonical data, demand features, demand forecasts, and a cash-conversion simulator that scores lots. See the [technical spec](../docs/specs/inventory-risk-engine.md) and the [ADRs](../docs/adr/).
 
 ## Setup
 
@@ -19,11 +19,34 @@ All data lives under `data/` by default: `data/canonical/` for canonical tables,
 | --- | --- |
 | `thp ingest-m5 [--stores CA_1 ...]` | Converts the M5 CSVs in `data/raw/m5/` into canonical Parquet for tenant `m5` |
 | `thp build-features --tenant T --as-of D [--latest-only]` | Writes the weekly demand feature panel (or only its last week) |
-| `thp forecast --tenant T --as-of D` | Writes the seasonal-naive baseline: q05…q95 for the next 13 weeks per SKU × location |
+| `thp forecast --tenant T --as-of D` | Writes the seasonal-naive baseline: q05…q95 for the next 14 weeks per SKU × location |
 | `thp ingest-forecasts --tenant T --source S --file F [--issued D]` | Loads forecasts from another source into canonical Parquet |
 | `thp forecast --tenant T --as-of D --source S` | Writes forecasts from source `S`, re-based onto `as_of` |
+| `thp make-demo [--skus N --weeks W --seed S]` | Generates the synthetic demo tenant `demo` and three lot requests in `data/demo/lots/` |
+| `thp score-lot LOT.json --tenant T [--source S]` | Scores a lot request: forecast, simulate, advance; prints JSON |
 
 `--as-of` is the date the computation pretends to be at: only data dated on or before it is read. Horizon 1 is the week after `as_of`'s last complete week.
+
+## Demo: score a lot end to end
+
+```
+uv run thp make-demo
+uv run thp score-lot data/demo/lots/po_disciplined.json --tenant demo
+uv run thp score-lot data/demo/lots/po_overbought.json --tenant demo
+uv run thp score-lot data/demo/lots/stock_slow_movers.json --tenant demo
+```
+
+`make-demo` writes a synthetic merchant (40 SKUs, two locations, three years) with every canonical table, including weekly stock snapshots and purchase orders that M5 lacks. Demand is seasonal and partly intermittent with shared shocks; an order-up-to buyer with disciplined, average and overbuying SKUs creates real stock-outs and excess stock. See `src/thp/ingest/demo.py`.
+
+The three lots, as of the demo's last day:
+
+| Lot | What it is | Tenor |
+|---|---|---|
+| `po_disciplined` | a new PO for the 12 WH1 best sellers, 8 weeks of recent demand, arriving in 6 weeks | 90 days |
+| `po_overbought` | the same PO at 30 weeks of demand | 90 days |
+| `stock_slow_movers` | stock financing of on-hand stock covering over 20 weeks | 60 days |
+
+`score-lot` prints the lot cost, the cash-ratio quantiles at 30/60/90 days, P(cash ratio < 1), expected unsold value, and the advance: q05 of the cash ratio at the tenor × lot cost ÷ (1 + fee), capped at 80% of cost. The decision rules (decline, reduce, refer) are not built yet, so every lot gets an advance amount, however small. A lot request is the spec's API request as JSON; add `"options": {"n_paths": 500, "seed": 1}` to change the run.
 
 ## Forecasts from another source
 
@@ -57,7 +80,7 @@ How the forecast is formed:
 
 The whole file is rejected if a row has neither `qty` nor `q50`, a value is negative, quantiles decrease, or a series repeats a week. Forecasts must be weekly.
 
-Output goes to `data/forecasts/forecast/external_<source>/<tenant>/as_of=<date>/forecast.parquet`. It has the same columns as the baseline's `seasonal_naive_v1` output.
+Output goes to `data/forecasts/forecast/external_<source>/<tenant>/as_of=<date>/forecast.parquet`. It has the same columns as the baseline's `seasonal_naive_v2` output.
 
 ## Layout
 
@@ -65,8 +88,10 @@ Output goes to `data/forecasts/forecast/external_<source>/<tenant>/as_of=<date>/
 src/thp/
   core/      as-of data access, config, seeding, tenant weeks
   schema/    canonical table schemas and the forecast quantiles
-  ingest/    M5 connector, external forecast ingest
+  ingest/    M5 connector, external forecast ingest, synthetic demo tenant
   features/  weekly demand features
   demand/    seasonal-naive baseline, external forecasts, forecast output
-  simulate/  cash-conversion simulator: demand sampling, copula, engine, inputs
+  simulate/  cash-conversion simulator: demand sampling, copula, engine, lot assembly
+  underwrite/ advance amount
+  scoring.py  forecast -> assemble -> simulate -> advance
 ```

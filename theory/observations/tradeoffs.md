@@ -2,6 +2,80 @@
 
 Choices made between alternatives, with what was given up. Newest first. See [the observations index](README.md) for the entry format.
 
+## Level ratio clipped to [0.1, 4]
+
+- **Date:** 2026-10-26
+- **Where:** `thp/src/thp/demand/baseline.py`, `RATIO_BOUNDS`
+- **Chosen:** clip the level-change ratio to [0.1, 4], over 8-week windows.
+- **Alternative:** a symmetric clip such as [0.25, 4], or no clip.
+- **Given up:** a quiet 8 weeks on a noisy, intermittent SKU can cut its forecast to a tenth.
+- **Gained:** collapsed SKUs (discontinued: demand down 90%) are forecast near their new level; with a 0.25 floor, SKU-029 in the demo stayed at twice its real rate. The errors are asymmetric: a too-low forecast only makes the lender cautious.
+- **Revisit if:** the forecast backtest shows intermittent SKUs under-covered at the low end.
+
+## Underwriting without decision rules
+
+- **Date:** 2026-10-26
+- **Where:** `thp/src/thp/underwrite/advance.py`
+- **Chosen:** only the advance formula, L* = q05 × cost ÷ (1 + fee), capped at 80% of cost.
+- **Alternative:** build the spec's rules (data trust, cover, cold start, P(cash ratio < 1) > 20%, minimum size) now.
+- **Given up:** every lot gets an amount. Both demo POs have P(cash ratio < 1) of 95% or more and would be declined under the spec's rules, but `score-lot` still shows an advance.
+- **Gained:** a runnable end-to-end demo now; the rules are Milestone 6 and need the data-trust score first.
+
+## Open POs ahead of a lot count as stock from week 1
+
+- **Date:** 2026-10-26
+- **Where:** `thp/src/thp/simulate/assemble.py`, `_stock_ahead`
+- **Chosen:** open POs expected no later than the lot are added to stock ahead, which the engine treats as available from the first week.
+- **Alternative:** give each open PO its own receipt week in the simulation.
+- **Given up:** before those POs arrive, the simulation sells them early, so the lot's own units sell later than they would.
+- **Gained:** a simpler engine. The bias delays the lot's cash, which is in the lender's favour.
+
+## PO status is ignored when finding open orders
+
+- **Date:** 2026-10-26
+- **Where:** `thp/src/thp/simulate/assemble.py`, `_stock_ahead`
+- **Chosen:** a PO line is open at as_of if ordered by then and not received by then, whatever its status.
+- **Alternative:** drop lines with status `cancelled`.
+- **Given up:** a PO cancelled before as_of still counts as stock ahead, which delays the lot's cash.
+- **Gained:** no leakage: the status column holds the *current* state, so a cancellation after as_of would otherwise leak into a backtest. The schema has no cancellation date.
+- **Revisit when:** a connector provides when a PO was cancelled.
+
+## A stock-financing lot is the youngest stock on hand
+
+- **Date:** 2026-10-26
+- **Where:** `thp/src/thp/simulate/assemble.py`, `_stock_ahead`
+- **Chosen:** for a lot with goods on hand, stock ahead is on hand minus the lot: the lot is the last units to sell (FIFO).
+- **Alternative:** the oldest units, or a pro-rata share of every sale.
+- **Given up:** a lender financing all of a SKU's stock gets the same answer either way; for part of it, this is the most cautious reading.
+- **Gained:** consistent with FIFO selling in the engine, and in the lender's favour.
+
+## Return rates per category, from the last 52 weeks
+
+- **Date:** 2026-10-26
+- **Where:** `thp/src/thp/simulate/assemble.py`, `_return_rates`
+- **Chosen:** returned ÷ sold units per category over the 52 weeks to as_of; 0 without data.
+- **Alternative:** per SKU, or shrunk from SKU toward category.
+- **Given up:** SKUs with unusually high return rates are averaged away.
+- **Gained:** stable estimates; most SKUs have too few returns for a rate of their own.
+
+## Stale stock snapshots refuse the lot
+
+- **Date:** 2026-10-26
+- **Where:** `thp/src/thp/simulate/assemble.py`, `MAX_SNAPSHOT_AGE_DAYS = 14`
+- **Chosen:** a lot is refused if a line's latest stock snapshot is more than 14 days older than as_of.
+- **Alternative:** use the old snapshot, rolled forward with sales and receipts since.
+- **Given up:** merchants who export stock monthly can't be scored without a fresh upload.
+- **Gained:** stock ahead, the input the lot's cash is most sensitive to, is never a guess.
+
+## Synthetic demo data instead of M5 for the end-to-end demo
+
+- **Date:** 2026-10-26
+- **Where:** `thp/src/thp/ingest/demo.py`
+- **Chosen:** a generated tenant with every table, from a known process.
+- **Alternative:** M5 with assumed stock and hand-written lots.
+- **Given up:** real demand. The demo shows the engine behaves sensibly (overbuying lowers the advance), not that it is calibrated; calibration needs real data and pseudo-loans.
+- **Gained:** no Kaggle download; stock snapshots and purchase orders exist, so every part of the pipeline runs; a fixture for integration tests.
+
 ## Refuse lots with missing forecast weeks
 
 - **Date:** 2026-10-25

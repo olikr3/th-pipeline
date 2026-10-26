@@ -47,7 +47,7 @@ Eight core tables, all keyed by `tenant_id`; facts are append-only with `ingeste
 | `sales` | tenant, sku, location, date, channel | qty, net\_revenue, discount, returned\_qty, customer\_type (b2b, b2c) |
 | `price` | tenant, sku, valid\_from | list\_price, unit\_cost (landed), currency |
 | `stock_snapshot` | tenant, sku, location, snapshot\_date | on\_hand\_qty, on\_order\_qty, reserved\_qty, unit\_cost, oldest\_receipt\_date |
-| `purchase_order` | tenant, po\_id, sku, line\_no | supplier\_id, order\_date, expected\_receipt\_date, actual\_receipt\_date, qty, unit\_cost, status |
+| `purchase_order` | tenant, po\_id, line\_no | sku, location\_id, supplier\_id, order\_date, expected\_receipt\_date, actual\_receipt\_date, qty, unit\_cost, status |
 
 **Optional for Phase 3+:** `receivable` (invoice\_date, due\_date, paid\_date, amount, customer\_id) to model B2B payment delay, and `markdown_event` (sku, date, discount\_pct) to estimate elasticity.
 
@@ -130,7 +130,7 @@ Features are computed weekly per SKU × location for a given `as_of`, using only
 
 ## Demand model
 
-One global LightGBM model per quantile, trained across all SKUs of a tenant (later across tenants), predicting weekly demand for horizons 1–13 weeks.
+One global LightGBM model per quantile, trained across all SKUs of a tenant (later across tenants), predicting weekly demand for horizons 1–14 weeks (14, not 13: a 90-day tenor counted from a mid-week as\_of reaches into week 14).
 
 **Formulation:**
 
@@ -180,7 +180,7 @@ Creates labeled training and evaluation lots before any real loan exists: every 
 
 A vectorized Monte Carlo (NumPy, N = 2,000 paths by default) that pushes demand samples through stock, pricing and payment mechanics to produce a distribution of `cash_ratio` per lot at day 30, 60 and 90.
 
-**Inputs:** lot lines (sku, qty, unit\_cost), current stock and open POs per SKU, forecast quantiles for horizons 1–13, price and markdown policy, return rate per category, receivable delay distribution, receipt date distribution, seed.
+**Inputs:** lot lines (sku, qty, unit\_cost), current stock and open POs per SKU, forecast quantiles for horizons 1–14, price and markdown policy, return rate per category, receivable delay distribution, receipt date distribution, seed.
 
 **Algorithm per lot (all paths at once, arrays shaped \[N, SKUs, weeks\]):**
 

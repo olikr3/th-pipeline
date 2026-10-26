@@ -16,18 +16,20 @@ Per lot, all paths at once (arrays ``[paths, SKUs, weeks]``):
    scales by (price ratio) ** elasticity.
 5. Cash from lot units only: units x marked-down price x (1 - return rate).
 
-Tenors count from the disbursement date (theory/tenor-clock.md): a tenor of T
-days covers the T days from the start of disbursement day. Cash inside a week is
-taken as spread evenly over its days, so a tenor ending mid-week gets that
-fraction of the week's cash. B2B receivable delays are not modelled yet.
+Tenors count from the disbursement date (theory/tenor-clock.md). as_of means
+data through the end of that day, and the money goes out at the end of the
+disbursement day, so a tenor of T days covers the T days after it. Cash inside a
+week is taken as spread evenly over its days, so a tenor ending mid-week gets
+that fraction of the week's cash. B2B receivable delays are not modelled yet.
 
 Time is measured in days from ``horizon_start``, the first day of forecast
-horizon week 1 (the day after as_of's last complete week).
+horizon week 1: the day after as_of's last complete week, so between six days
+before as_of and the day after it.
 """
 
 import math
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 
 import numpy as np
 import numpy.typing as npt
@@ -83,8 +85,8 @@ class Lot:
         check_knots(self.knots)
         if self.knots.ndim != 3 or self.knots.shape[0] != n:
             raise ValueError(f"knots have shape {self.knots.shape}, expected ({n}, weeks, 7)")
-        if self.as_of < self.horizon_start:
-            raise ValueError("as_of lies before the forecast horizon")
+        if self.as_of < self.horizon_start - timedelta(days=1):
+            raise ValueError("the forecast horizon must start no later than the day after as_of")
         if self.disbursement_date < self.as_of:
             raise ValueError("disbursement_date lies before as_of")
         if not self.tenors_days or min(self.tenors_days) <= 0:
@@ -97,8 +99,7 @@ class Lot:
     @property
     def weeks_needed(self) -> int:
         """Forecast weeks from horizon_start to the end of the longest tenor."""
-        start = (self.disbursement_date - self.horizon_start).days
-        return math.ceil((start + max(self.tenors_days)) / 7)
+        return weeks_needed(self.disbursement_date, self.horizon_start, max(self.tenors_days))
 
 
 @dataclass(frozen=True, eq=False)
@@ -181,7 +182,7 @@ def simulate_lot(lot: Lot, seed: int, settings: SimulateSettings) -> LotSimulati
         sold[:, :, t] = from_lot
         cash[:, t] = (from_lot * net_price * (1 - cut)).sum(axis=1)
 
-    start = (lot.disbursement_date - lot.horizon_start).days
+    start = tenor_start(lot.disbursement_date, lot.horizon_start)
     ends = [start + tenor for tenor in lot.tenors_days]
     cash_ratio = np.stack(
         [_through(cash, end) - _through(cash, start) for end in ends], axis=1
@@ -194,6 +195,16 @@ def simulate_lot(lot: Lot, seed: int, settings: SimulateSettings) -> LotSimulati
         unsold_units=np.maximum(lot.qty - sold_in_tenor, 0).astype(np.float32),
         receipt_week=receipt,
     )
+
+
+def tenor_start(disbursement_date: date, horizon_start: date) -> int:
+    """Day offset from horizon_start where tenors begin: the day after disbursement."""
+    return (disbursement_date - horizon_start).days + 1
+
+
+def weeks_needed(disbursement_date: date, horizon_start: date, tenor_days: int) -> int:
+    """Forecast weeks needed to cover a tenor from disbursement."""
+    return math.ceil((tenor_start(disbursement_date, horizon_start) + tenor_days) / 7)
 
 
 def receipt_week_probs(lot: Lot, n_weeks: int, sigma: float) -> npt.NDArray[np.float64]:

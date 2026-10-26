@@ -2,6 +2,14 @@
 
 Defects found in code or tests: what broke, why, and how it was fixed. Newest first. See [the observations index](README.md) for the entry format.
 
+## Engine rejected lots whose as_of ends a week
+
+- **Date:** 2026-10-26
+- **Where:** `thp/src/thp/simulate/engine.py`, `Lot.__post_init__` and the tenor window
+- **What happened:** `Lot` required `horizon_start <= as_of`. When as_of is the last day of a week (a Sunday for Monday weeks), that week is complete and the forecast horizon starts the next day, so every such lot failed with "as_of lies before the forecast horizon". The engine tests always used a Monday as_of and never hit it; scoring the first demo lot (as of a Sunday) did.
+- **Impact:** no lot could be scored on the most natural as_of, the end of a complete week.
+- **Resolution:** as_of means data through the end of that day, so tenors now cover the T days *after* the disbursement day (`tenor_start` in `engine.py`), and the horizon may start up to the day after as_of. The engine tests now use a Sunday as_of by default.
+
 ## Feature property test compared against a later as_of
 
 - **Date:** 2026-10-25

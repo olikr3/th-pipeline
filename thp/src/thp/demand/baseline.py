@@ -1,6 +1,10 @@
-"""Seasonal-naive baseline with empirical residual quantiles.
+"""Level-adjusted seasonal-naive baseline with empirical residual quantiles.
 
-The point forecast for a week is the same week a year earlier. Series with too
+The point forecast for a week is the same week a year earlier, scaled by how the
+series' level has changed since: the mean of its last ``RATIO_WEEKS`` weeks over
+the mean of the same weeks a year earlier, clipped to ``RATIO_BOUNDS`` (1 when
+the year-ago weeks had no sales). Without the scaling, a SKU that was
+discontinued or collapsed is forecast at last year's level. Series with too
 little history for that, or for a year of its errors, use the mean of their last
 four weeks instead. Quantiles add the empirical quantiles of the method's errors
 over the trailing ``residual_weeks`` to the point.
@@ -24,10 +28,14 @@ from thp.demand.forecast import finish_forecast
 from thp.features.demand import NEW_SERIES_WEEKS, SERIES, weekly_demand
 from thp.schema import QUANTILE_COLS, QUANTILES
 
-MODEL_VERSION = "seasonal_naive_v1"
+MODEL_VERSION = "seasonal_naive_v2"
 
 SEASON_WEEKS = 52
 LEVEL_WEEKS = 4
+RATIO_WEEKS = 8
+# Asymmetric: too low a floor only makes the lender cautious, too high a floor
+# keeps collapsed SKUs (e.g. discontinued, demand down 90%) looking sellable.
+RATIO_BOUNDS = (0.1, 4.0)
 # A seasonal series needs a full year back plus a cold-start span of errors.
 SEASONAL_MIN_WEEKS = SEASON_WEEKS + NEW_SERIES_WEEKS
 
@@ -41,6 +49,17 @@ def seasonal_naive(store: AsOfStore, settings: DemandSettings) -> pl.DataFrame:
         # One-step forecast of the four-week mean, for its errors.
         _prior_level=qty.shift(1).rolling_mean(LEVEL_WEEKS, min_samples=1).over(SERIES),
         _level=qty.rolling_mean(LEVEL_WEEKS, min_samples=1).over(SERIES),
+        _recent=qty.rolling_mean(RATIO_WEEKS, min_samples=1).over(SERIES),
+    )
+    year_ago_level = pl.col("_recent").shift(SEASON_WEEKS).over(SERIES)
+    weekly = weekly.with_columns(
+        # Level change over the last year, as known at the end of each week.
+        _ratio=pl.when(year_ago_level > 0)
+        .then((pl.col("_recent") / year_ago_level).clip(*RATIO_BOUNDS))
+        .otherwise(1.0)
+    ).with_columns(
+        # The forecast of each week made a week earlier, for the errors.
+        _prior_season=pl.col("_season") * pl.col("_ratio").shift(1).over(SERIES),
     )
     weekly = weekly.with_columns(
         _seasonal=pl.col("history_weeks") >= SEASONAL_MIN_WEEKS,
@@ -49,7 +68,9 @@ def seasonal_naive(store: AsOfStore, settings: DemandSettings) -> pl.DataFrame:
     category = store.reference("sku").select("sku_id", "category_l1").collect()
 
     window_start = last_end - timedelta(weeks=settings.residual_weeks)
-    fitted = pl.when(pl.col("_seasonal")).then(pl.col("_season")).otherwise(pl.col("_prior_level"))
+    fitted = (
+        pl.when(pl.col("_seasonal")).then(pl.col("_prior_season")).otherwise(pl.col("_prior_level"))
+    )
     errors = (
         weekly.filter(pl.col("week_end") > window_start)
         .with_columns(_fit=fitted)
@@ -67,7 +88,7 @@ def seasonal_naive(store: AsOfStore, settings: DemandSettings) -> pl.DataFrame:
         {"horizon_week": range(1, settings.horizon_weeks + 1)}, schema={"horizon_week": pl.Int16}
     )
     origin = weekly.filter(pl.col("week_end") == last_end).select(
-        *SERIES, "_seasonal", "_level", "is_cold_start"
+        *SERIES, "_seasonal", "_level", "_ratio", "is_cold_start"
     )
     year_ago = weekly.select(*SERIES, _src="week_end", _season_point="qty")
     rows = (
@@ -77,7 +98,7 @@ def seasonal_naive(store: AsOfStore, settings: DemandSettings) -> pl.DataFrame:
         .join(year_ago, on=[*SERIES, "_src"], how="left")
         .with_columns(
             _point=pl.when(pl.col("_seasonal"))
-            .then(pl.col("_season_point"))
+            .then(pl.col("_season_point") * pl.col("_ratio"))
             .otherwise(pl.col("_level"))
         )
         .join(category, on="sku_id", how="left")

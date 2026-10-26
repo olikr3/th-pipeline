@@ -124,6 +124,47 @@ PRICE = TableSchema(
     key=("tenant_id", "sku_id", "location_id", "valid_from"),
 )
 
+STOCK_SNAPSHOT = TableSchema(
+    name="stock_snapshot",
+    columns={
+        "tenant_id": _STR,
+        "sku_id": _STR,
+        "location_id": _STR,
+        "snapshot_date": _DATE,
+        "on_hand_qty": _NUM,
+        "on_order_qty": _NUM,
+        "reserved_qty": _NUM,
+        "unit_cost": _NUM,
+        "oldest_receipt_date": _DATE,
+        "ingested_at": _TS,
+    },
+    key=("tenant_id", "sku_id", "location_id", "snapshot_date"),
+)
+
+# One row per PO line. location_id is not in the spec's table but is needed to
+# know where the goods land. The as-of filter is on order_date, so for an as_of
+# before receipt, actual_receipt_date and status describe the future: read them
+# only when actual_receipt_date <= as_of.
+PURCHASE_ORDER = TableSchema(
+    name="purchase_order",
+    columns={
+        "tenant_id": _STR,
+        "po_id": _STR,
+        "line_no": pl.Int32(),
+        "sku_id": _STR,
+        "location_id": _STR,
+        "supplier_id": _STR,
+        "order_date": _DATE,
+        "expected_receipt_date": _DATE,
+        "actual_receipt_date": _DATE,
+        "qty": _NUM,
+        "unit_cost": _NUM,
+        "status": _STR,  # open, received, cancelled
+        "ingested_at": _TS,
+    },
+    key=("tenant_id", "po_id", "line_no"),
+)
+
 # Demand quantiles every forecast carries, and their column names.
 QUANTILES = (0.05, 0.10, 0.25, 0.50, 0.75, 0.90, 0.95)
 QUANTILE_COLS = tuple(f"q{round(q * 100):02d}" for q in QUANTILES)

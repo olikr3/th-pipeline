@@ -1,4 +1,5 @@
 import argparse
+import json
 from datetime import date
 from pathlib import Path
 
@@ -8,10 +9,11 @@ from thp.demand.baseline import seasonal_naive
 from thp.demand.external import external_forecast
 from thp.demand.forecast import write_forecast
 from thp.features.demand import tenant_week_start, write_demand_features
+from thp.ingest.demo import DemoSpec, build_demo, demo_lots
 from thp.ingest.forecasts import read_external_forecasts, write_external_forecasts
 from thp.ingest.m5 import build_m5
-
-BASELINE = "baseline"
+from thp.scoring import BASELINE, score_lot
+from thp.simulate.assemble import LotRequest
 
 
 def main() -> None:
@@ -56,6 +58,25 @@ def main() -> None:
     forecast.add_argument("--out", type=Path, default=Path("data/forecasts"))
     forecast.add_argument("--config", type=Path, action="append", default=[], help="YAML layer(s)")
 
+    demo = commands.add_parser("make-demo", help="generate the synthetic demo tenant and lots")
+    demo.add_argument("--canonical", type=Path, default=Path("data/canonical"))
+    demo.add_argument("--lots", type=Path, default=Path("data/demo/lots"))
+    demo.add_argument("--skus", type=int, default=DemoSpec.n_skus)
+    demo.add_argument("--weeks", type=int, default=DemoSpec.weeks, help="weeks of history")
+    demo.add_argument("--seed", type=int, default=DemoSpec.seed)
+    demo.add_argument("--config", type=Path, action="append", default=[], help="YAML layer(s)")
+
+    score = commands.add_parser("score-lot", help="score a lot request (JSON) and print the result")
+    score.add_argument("lot", type=Path, help="lot request JSON, as written by make-demo")
+    score.add_argument("--tenant", required=True)
+    score.add_argument(
+        "--source",
+        default=BASELINE,
+        help=f"{BASELINE!r} (seasonal naive) or the name of an ingested external source",
+    )
+    score.add_argument("--canonical", type=Path, default=Path("data/canonical"))
+    score.add_argument("--config", type=Path, action="append", default=[], help="YAML layer(s)")
+
     args = parser.parse_args()
     settings = load_settings(*args.config)
     if args.command == "ingest-m5":
@@ -98,3 +119,19 @@ def main() -> None:
                 print(f"skipped {n:,} series without sales history to derive missing quantiles")
         series = result.select("sku_id", "location_id").n_unique()
         print(f"{series:,} series, {result.height:,} rows -> {write_forecast(result, args.out)}")
+    elif args.command == "make-demo":
+        spec = DemoSpec(n_skus=args.skus, weeks=args.weeks, seed=args.seed)
+        for table, rows in build_demo(args.canonical, spec).items():
+            print(f"{table:>15}: {rows:,} rows")
+        args.lots.mkdir(parents=True, exist_ok=True)
+        for name, lot in demo_lots(args.canonical, spec).items():
+            path = args.lots / f"{name}.json"
+            path.write_text(json.dumps(lot, indent=2) + "\n")
+            print(f"{'lot':>15}: {path}")
+    elif args.command == "score-lot":
+        request = LotRequest.model_validate_json(args.lot.read_text())
+        n_paths = request.options.n_paths
+        overrides = {"simulate": {"n_paths": n_paths}} if n_paths else {}
+        run_settings = load_settings(*args.config, overrides)
+        scored = score_lot(args.canonical, args.tenant, request, run_settings, args.source)
+        print(json.dumps(scored, indent=2))

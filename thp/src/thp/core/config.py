@@ -26,7 +26,8 @@ class AsOfSettings(_Section):
 
 
 class DemandSettings(_Section):
-    horizon_weeks: int = Field(default=13, gt=0, le=52)
+    # 14, not the spec's 13: a 90-day tenor from a mid-week as_of reaches week 14.
+    horizon_weeks: int = Field(default=14, gt=0, le=52)
     # Trailing weeks of baseline forecast errors that set the quantile spread.
     residual_weeks: int = Field(default=52, gt=0)
     # External forecasts issued longer ago than this before as_of are ignored.
@@ -77,10 +78,17 @@ class M5Settings(_Section):
     default_gross_margin: float = Field(default=0.30, gt=0, lt=1)
 
 
+class UnderwriteSettings(_Section):
+    # Cash at the tenor must cover the loan plus fee in this share of paths.
+    confidence: float = Field(default=0.95, gt=0, lt=1)
+    max_advance_rate: float = Field(default=0.80, gt=0, le=1)  # of lot cost
+
+
 class Settings(_Section):
     asof: AsOfSettings = AsOfSettings()
     demand: DemandSettings = DemandSettings()
     simulate: SimulateSettings = SimulateSettings()
+    underwrite: UnderwriteSettings = UnderwriteSettings()
     m5: M5Settings = M5Settings()
 
     @property

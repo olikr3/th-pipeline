@@ -13,6 +13,7 @@ from thp.simulate.engine import Lot, receipt_week_probs, simulate_lot
 from thp.simulate.inputs import MissingForecastError, forecast_knots, series_key
 
 HORIZON_START = date(2026, 1, 5)  # a Monday: horizon week 1 is Jan 5..11
+AS_OF = HORIZON_START - timedelta(days=1)  # the Sunday that completes the last week
 WEEKS = 13
 # Markdowns off unless a test turns them on, so mechanics can be checked exactly.
 NO_MARKDOWN = MarkdownSettings(cover_weeks=1e9, age_weeks=1000)
@@ -27,9 +28,9 @@ def _knots(per_week: float, n: int = 1) -> np.ndarray:
 def _lot(**overrides: Any) -> Lot:
     n = len(overrides.get("series", ("A|L1",)))
     args: dict[str, Any] = {
-        "as_of": HORIZON_START,
+        "as_of": AS_OF,
         "horizon_start": HORIZON_START,
-        "disbursement_date": HORIZON_START,
+        "disbursement_date": AS_OF,
         "series": ("A|L1",),
         "categories": ("food",),
         "qty": np.full(n, 100, np.float32),
@@ -86,12 +87,12 @@ def test_po_lot_waits_for_receipt() -> None:
 
 
 def test_tenor_counts_from_disbursement() -> None:
-    # Disbursed on day 3 of a lot on hand since day 0: the 28 days run from day 3
-    # to day 31, still four weeks of sales. By day 87 the lot has sold out (day
-    # 70), and the 3/7 of a week sold before disbursement does not count.
+    # Disbursed at the end of day 3 of a lot on hand since day 0: the 28 days run
+    # over days 4..31, still four weeks of sales. By day 88 the lot has sold out
+    # (day 70), and the 4/7 of a week sold before disbursement does not count.
     late = HORIZON_START + timedelta(days=3)
     ratio = _ratio(_lot(as_of=late, disbursement_date=late, tenors_days=(28, 59, 84)))
-    np.testing.assert_allclose(ratio[0], [4 / 6, (59 / 7) / 6, (1000 - 300 / 7) / 600], rtol=1e-5)
+    np.testing.assert_allclose(ratio[0], [4 / 6, (59 / 7) / 6, (1000 - 400 / 7) / 600], rtol=1e-5)
 
 
 def test_tenor_ending_mid_week_takes_that_fraction() -> None:
@@ -234,7 +235,7 @@ def test_receipt_probabilities() -> None:
 
 def test_tenor_beyond_the_forecast_is_refused() -> None:
     late = HORIZON_START + timedelta(days=3)
-    lot = _lot(as_of=late, disbursement_date=late, tenors_days=(90,))  # needs week 14
+    lot = _lot(as_of=late, disbursement_date=late, tenors_days=(90,))  # days 4..93: week 14
     with pytest.raises(ValueError, match="needs 14 forecast weeks"):
         simulate_lot(lot, 1, SETTINGS)
 
@@ -248,8 +249,8 @@ def test_tenor_beyond_the_forecast_is_refused() -> None:
         ({"return_rate": np.array([1], dtype=np.float32)}, "below 1"),
         ({"knots": _knots(1.0)[:, :, :6]}, "last axis"),
         ({"categories": ("a", "b")}, "categories"),
-        ({"disbursement_date": HORIZON_START - timedelta(days=1)}, "before as_of"),
-        ({"as_of": HORIZON_START - timedelta(days=1)}, "before the forecast horizon"),
+        ({"disbursement_date": AS_OF - timedelta(days=1)}, "before as_of"),
+        ({"as_of": AS_OF - timedelta(days=1)}, "no later than the day after as_of"),
         ({"tenors_days": (0,)}, "positive"),
     ],
 )
