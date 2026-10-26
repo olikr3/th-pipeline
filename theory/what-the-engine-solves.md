@@ -61,9 +61,9 @@ Weekly sales per SKU × location are turned into the inputs a forecast needs: re
 
 ### 3. Demand forecasts as quantiles
 
-For each SKU × location and each of the next 13 weeks, the forecast gives seven quantiles, q05 to q95: a full distribution of demand, not a point. The engine is agnostic about where it comes from ([ADR 0002](../docs/adr/0002-baseline-and-external-forecasts.md)):
+For each SKU × location and each of the next 14 weeks, the forecast gives seven quantiles, q05 to q95: a full distribution of demand, not a point. The engine is agnostic about where it comes from ([ADR 0002](../docs/adr/0002-baseline-and-external-forecasts.md)):
 
-- the **seasonal-naive baseline** (built), the bar every model must beat;
+- the **level-adjusted seasonal-naive baseline** (built), the bar every model must beat;
 - a **LightGBM quantile model** (planned), trained across all SKUs of a tenant;
 - **external forecasts** from the merchant's own planning tool (built), with missing quantiles filled from the baseline's spread.
 
@@ -119,14 +119,15 @@ The median future returns 118% of cost by day 90, so a point forecast would have
 - **Bad data.** Calibration holds only for data that reflects reality. The data-trust score flags inconsistencies but can't detect consistent misreporting.
 - **Uncalibrated forecasts.** If the demand quantiles are too narrow, the cash-ratio distribution is too, whatever the simulator does. That's why forecasts are backtested on their own (coverage of P10–P90 and below P05) before lots are.
 
-## Build status (2026-10-25)
+## Build status (2026-10-26)
 
 | Part | Status |
 |---|---|
-| Canonical schema, as-of store, config, seeding | built |
+| Canonical schema (incl. stock snapshots, purchase orders), as-of store, config, seeding | built |
 | M5 ingest, demand features | built (full-dataset timing not yet verified) |
-| Seasonal-naive baseline, external forecasts | built |
+| Synthetic demo tenant and demo lots (`thp make-demo`) | built |
+| Seasonal-naive baseline (level-adjusted), external forecasts | built |
 | LightGBM model, forecast evaluation harness | planned |
-| Simulator: demand sampling (`quantiles.py`), copula (`copula.py`) | built |
-| Simulator engine: receipt, selling, markdown, cash (`engine.py`) | built (B2B receivable delays not yet) |
-| Pseudo-loans, underwriting, trapped-cash report, API | planned |
+| Simulator: sampling, copula, engine, lot assembly; `thp score-lot` | built (B2B receivable delays not yet) |
+| Underwriting | advance formula and cap built; liquidation floor and decision rules planned |
+| Pseudo-loans, trapped-cash report, API | planned |

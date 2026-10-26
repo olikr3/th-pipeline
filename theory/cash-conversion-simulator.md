@@ -12,7 +12,7 @@ The simulator answers: *across 2,000 plausible futures, what fraction of V comes
 
 **Inputs per lot line:**
 
-- the forecast quantiles q05…q95 for horizons 1–13, from the `forecast` table at the lot's `as_of`;
+- the forecast quantiles q05…q95 for horizons 1–14, from the `forecast` table at the lot's `as_of`;
 - the current price;
 - existing stock ahead of the lot (on hand plus earlier open POs);
 - a return rate;

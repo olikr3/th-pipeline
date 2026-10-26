@@ -108,15 +108,48 @@ def test_baseline_covers_every_series_and_horizon(baseline: pl.DataFrame) -> Non
     assert weeks == [LAST_END + timedelta(weeks=h) for h in range(1, H + 1)]
 
 
-def test_seasonal_series_uses_last_year_and_its_errors(baseline: pl.DataFrame) -> None:
-    # Errors over the 28 weeks that have a year behind them (52..79).
-    errors = pl.Series([_seasonal_qty(s) - _seasonal_qty(s - 52) for s in range(52, 80)])
+def _level_ratio(week: int) -> float:
+    """Mean of the 8 weeks to ``week`` over the same weeks a year earlier, clipped."""
+
+    def mean(end: int) -> float:
+        return sum(_seasonal_qty(k) for k in range(max(end - 7, 0), end + 1)) / (
+            end - max(end - 7, 0) + 1
+        )
+
+    if week < 52 or mean(week - 52) == 0:
+        return 1.0
+    return min(max(mean(week) / mean(week - 52), 0.1), 4.0)
+
+
+def test_seasonal_series_uses_last_year_scaled_by_its_level(baseline: pl.DataFrame) -> None:
+    # Errors over the 28 weeks that have a year behind them (52..79), each against
+    # the forecast made a week before.
+    errors = pl.Series(
+        [_seasonal_qty(s) - _seasonal_qty(s - 52) * _level_ratio(s - 1) for s in range(52, 80)]
+    )
     offsets = [errors.quantile(q, interpolation="linear") or 0.0 for q in QUANTILES]
     for h in (1, 7, H):
-        point = _seasonal_qty(79 + h - 52)
+        point = _seasonal_qty(79 + h - 52) * _level_ratio(79)
         row = _row(baseline, "S", h)
         assert _quantiles(row) == pytest.approx([max(point + o, 0.0) for o in offsets])
         assert row["is_cold_start"] is False
+
+
+def test_level_drop_scales_last_years_demand_down(tmp_path: Path) -> None:
+    # A seasonal series whose demand fell to a tenth over the last 8 weeks (e.g.
+    # discontinued): last year's weeks are scaled down to about a tenth.
+    rows = [
+        {
+            **r,
+            "qty": r["qty"] / 10
+            if r["sku_id"] == "S" and r["date"] > LAST_END - timedelta(weeks=8)
+            else r["qty"],
+        }
+        for r in _sales_rows()
+    ]
+    _write_all(tmp_path, rows)
+    dropped = seasonal_naive(_store(tmp_path), SETTINGS)
+    assert _row(dropped, "S", 1)["q50"] < 0.3 * _seasonal_qty(80 - 52) + 2
 
 
 def test_short_series_uses_four_week_mean(baseline: pl.DataFrame) -> None:

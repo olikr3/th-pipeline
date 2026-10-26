@@ -24,6 +24,8 @@ Separately, many merchants already forecast demand in a planning tool or ERP. Th
 
 Horizon 1 is the week after `as_of`'s last complete week, matching the last row of the feature panel.
 
+**Amended 2026-10-26 (`seasonal_naive_v2`):** the seasonal point is scaled by the series' level change, the mean of its last 8 weeks over the same weeks a year earlier, clipped to [0.1, 4]. Plain seasonal naive forecast discontinued SKUs at last year's level, so the simulator expected dead stock to sell through (see `theory/observations/wrong-assumptions.md`). The default horizon is also 14 weeks, not 13, so that a 90-day tenor from a mid-week `as_of` is covered.
+
 **Why.** The spec needs this baseline anyway as the bar for LightGBM, and it gives Milestones 4–5 real forecasts to build on now. It needs no new dependencies and no training.
 
 **Known limitation.** The spread does not widen with the horizon. That is exact for seasonal naive, whose forecast for a week uses the week a year earlier whatever the origin, but it understates the spread of the four-week mean at long horizons.

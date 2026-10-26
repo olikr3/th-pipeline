@@ -4,7 +4,8 @@ asof:
   ingest_grace_days: null
 
 demand:
-  horizon_weeks: 13
+  # 14, not the spec's 13: a 90-day tenor from a mid-week as_of reaches week 14.
+  horizon_weeks: 14
   # Trailing weeks of baseline forecast errors that set the quantile spread.
   residual_weeks: 52
   # External forecasts issued longer ago than this before as_of are ignored.
@@ -33,6 +34,11 @@ simulate:
   # AR(1) week-to-week persistence of the shared shocks and of the SKU level.
   shock_persistence: 0.7
   sku_persistence: 0.9
+
+underwrite:
+  # Cash at the tenor must cover the loan plus fee in this share of paths.
+  confidence: 0.95
+  max_advance_rate: 0.80  # of lot cost
 
 m5:
   tenant_id: m5

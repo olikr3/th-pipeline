@@ -2,6 +2,42 @@
 
 Assumptions, in the spec, the code or our own reasoning, that turned out to be wrong or incomplete. Newest first. See [the observations index](README.md) for the entry format.
 
+## Plain seasonal naive is good enough to score lots with
+
+- **Date:** 2026-10-26
+- **Source:** our reasoning, from the spec's baseline (`thp/src/thp/demand/baseline.py`, v1)
+- **Assumption:** the spec's seasonal-naive baseline, last year's demand for the same week, is a usable forecast to score lots with until LightGBM exists.
+- **Why it's wrong:** it cannot see a level change. A discontinued demo SKU selling 7.75 units a week was forecast at 32, last year's level, so the simulator expected the slow-movers lot of dead stock to return 1.42× its cost in 60 days, and the advance hit the 80% cap.
+- **Impact:** over-advancing on exactly the stock a lender should worry about: collapsed, discontinued or declining SKUs.
+- **Status:** fixed in `seasonal_naive_v2`: last year's week is scaled by the series' level change (last 8 weeks over the same weeks a year earlier), clipped to [0.1, 4] (see [tradeoffs](tradeoffs.md)). The slow-movers lot now gets 59%. Recorded as an amendment in ADR 0002.
+
+## A 13-week forecast covers 90-day tenors
+
+- **Date:** 2026-10-26
+- **Source:** spec ("horizons 1–13"), and our own [tenor clock](../tenor-clock.md) note
+- **Assumption:** 13 weeks (91 days) covers a 90-day tenor from any as_of.
+- **Why it's wrong:** horizon week 1 starts after as_of's last *complete* week, up to 6 days before as_of, and the tenor runs from the day after disbursement. From an as_of other than the last or first day of a week, 90 days reach into week 14, so the lot was refused.
+- **Impact:** 90-day tenors could only be scored on two weekdays out of seven.
+- **Status:** default `demand.horizon_weeks` is now 14; the spec's demand-model section is updated. External sources that forecast only 13 weeks still can't score a 90-day tenor from mid-week (the lot is refused, by design).
+
+## A buyer ordering from recent sales keeps stock healthy
+
+- **Date:** 2026-10-26
+- **Source:** our reasoning, in the demo generator (`thp/src/thp/ingest/demo.py`)
+- **Assumption:** an order-up-to buyer using the mean of the last eight weeks' sales gives realistic stock levels.
+- **Why it's wrong:** sales are censored by stock-outs, so a stock-out lowers the next order, which causes the next stock-out. The buyer also ignored seasonality, ordering for today's rate with 6–8 weeks of lead time. 29% of series-weeks ended out of stock, against roughly 5–10% for real merchants.
+- **Impact:** demo data would have shown mostly stock-out behaviour, not the excess stock the engine is about.
+- **Status:** fixed: the buyer estimates the rate from in-stock days only and scales it by the known seasonal curve over the coming lead time. Active SKUs are now out of stock 10.5% of the time. The same censoring trap applies to real merchants' forecasts: features already carry an availability flag in the spec, and the demand model must down-weight censored weeks.
+
+## The spec's purchase_order table is enough to know where stock lands
+
+- **Date:** 2026-10-26
+- **Source:** spec, canonical data model
+- **Assumption:** `purchase_order` (keyed by tenant, po_id, sku, line_no) carries what the engine needs.
+- **Why it's wrong:** it has no location, so open POs can't be attributed to a SKU × location's stock ahead.
+- **Impact:** lot assembly could not compute stock ahead per location.
+- **Status:** `location_id` added to `PURCHASE_ORDER` (`thp/src/thp/schema/canonical.py`), keyed by (tenant, po_id, line_no); the spec's table is updated.
+
 ## "More stock ahead never raises the cash ratio" fails with markdowns
 
 - **Date:** 2026-10-25
