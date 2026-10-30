@@ -2,6 +2,15 @@
 
 Choices made between alternatives, with what was given up. Newest first. See [the observations index](README.md) for the entry format.
 
+## A uv workspace at the repo root
+
+- **Date:** 2026-10-26
+- **Where:** `pyproject.toml` and `uv.lock` at the repo root; `thp/uv.lock` removed
+- **Chosen:** a virtual workspace root (no package of its own) with `thp/` as its only member, so `uv run thp ...` works from the root as well as from `thp/`.
+- **Alternative:** keep `thp/` a standalone project and run commands from there, or with `uv run --project thp`.
+- **Given up:** one more file at the root; the lockfile moved, so older checkouts' `thp/uv.lock` no longer applies. The root lock was seeded from the old one, so no package versions changed.
+- **Gained:** commands work from either directory against one lockfile and `.venv`. CI (`working-directory: thp`, `uv sync --locked`) and the pre-commit hooks work unchanged.
+
 ## Level ratio clipped to [0.1, 4]
 
 - **Date:** 2026-10-26
