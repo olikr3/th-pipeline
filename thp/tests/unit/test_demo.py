@@ -1,4 +1,5 @@
 import json
+import shutil
 import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -115,6 +116,22 @@ def test_overbuying_lowers_the_advance(root: Path) -> None:
         assert d90["q05"] <= d90["q50"] <= d90["q90"]
 
 
+def test_scores_without_stock_or_purchase_orders(root: Path, tmp_path: Path) -> None:
+    # Sources like M5 have neither table; a PO lot still scores, with nothing ahead of it.
+    for table in ("tenant", "location", "sku", "sales", "price"):
+        shutil.copytree(root / table, tmp_path / table)
+    settings = load_settings({"simulate": {"n_paths": 200}})
+    lots = demo_lots(root, SPEC)
+    request = LotRequest.model_validate(lots["po_disciplined"])
+    without = score_lot(tmp_path, SPEC.tenant_id, request, settings)
+    with_stock = score_lot(root, SPEC.tenant_id, request, settings)
+    assert without["advance_amount"] >= with_stock["advance_amount"]
+    if "stock_slow_movers" in lots:
+        stock_lot = LotRequest.model_validate(lots["stock_slow_movers"])
+        with pytest.raises(ValueError, match="exceeds stock on hand"):
+            score_lot(tmp_path, SPEC.tenant_id, stock_lot, settings)
+
+
 def test_cli_make_demo_and_score_lot(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -151,6 +168,25 @@ def test_cli_make_demo_and_score_lot(
     )
     cli.main()
     scored = json.loads(capsys.readouterr().out)
+    # A bare name is looked up in --lots.
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "thp",
+            "score-lot",
+            "po_disciplined",
+            "--tenant",
+            "demo",
+            "--canonical",
+            str(canonical),
+            "--lots",
+            str(lots),
+        ],
+    )
+    cli.main()
+    assert json.loads(capsys.readouterr().out) == scored
     assert scored["name"] == "PO, disciplined"
     assert scored["versions"]["seed"] == 5
     assert set(scored["cash_ratio"]) == {"d30", "d60", "d90"}
