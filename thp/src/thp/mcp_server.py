@@ -21,6 +21,7 @@ from pydantic import Field
 
 from thp.core.asof import AsOfStore
 from thp.core.config import Settings, load_settings
+from thp.core.paths import data_root
 from thp.demand.baseline import seasonal_naive
 from thp.demand.external import external_forecast
 from thp.demand.forecast import write_forecast
@@ -53,13 +54,21 @@ _READS = ToolAnnotations(readOnlyHint=True)
 
 def build_server(
     *,
-    canonical: Path = Path("data/canonical"),
-    features: Path = Path("data/features"),
-    forecasts: Path = Path("data/forecasts"),
-    lots: Path = Path("data/demo/lots"),
+    canonical: Path | None = None,
+    features: Path | None = None,
+    forecasts: Path | None = None,
+    lots: Path | None = None,
     config: tuple[Path, ...] = (),
 ) -> MCPServer:
-    """An MCP server over the data under these paths, with ``config`` YAML layers."""
+    """An MCP server over the data under these paths, with ``config`` YAML layers.
+
+    Paths left out default to the data root (see ``thp.core.paths``).
+    """
+    data = data_root()
+    canonical = canonical or data / "canonical"
+    features = features or data / "features"
+    forecasts = forecasts or data / "forecasts"
+    lots = lots or data / "demo" / "lots"
     settings = load_settings(*config)
     server = MCPServer("thp", instructions=INSTRUCTIONS)
 

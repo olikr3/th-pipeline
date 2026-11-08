@@ -10,6 +10,8 @@ from pathlib import Path
 
 import polars as pl
 
+from thp.schema import EXTERNAL_FORECAST, PURCHASE_ORDER, STOCK_SNAPSHOT, TableSchema
+
 INGESTED_COL = "ingested_at"
 TENANT_COL = "tenant_id"
 
@@ -23,6 +25,12 @@ FACT_EVENT_COLS: dict[str, str] = {
 }
 
 REFERENCE_TABLES: frozenset[str] = frozenset({"tenant", "location", "sku", "supplier"})
+
+# Tables a source may not have (M5 has no stock or purchase orders): a missing one
+# reads as empty. Any other missing table is an error, usually a wrong data root.
+OPTIONAL_TABLES: dict[str, TableSchema] = {
+    schema.name: schema for schema in (STOCK_SNAPSHOT, PURCHASE_ORDER, EXTERNAL_FORECAST)
+}
 
 
 @dataclass(frozen=True)
@@ -58,5 +66,10 @@ class AsOfStore:
         return self._scan(table)
 
     def _scan(self, table: str) -> pl.LazyFrame:
-        frame = pl.scan_parquet(self.root / table / "**" / "*.parquet")
+        directory = self.root / table
+        if next(directory.glob("**/*.parquet"), None) is None:
+            if table in OPTIONAL_TABLES:
+                return pl.LazyFrame(schema=OPTIONAL_TABLES[table].columns)
+            raise FileNotFoundError(f"no {table!r} table: no Parquet files under {directory}")
+        frame = pl.scan_parquet(directory / "**" / "*.parquet")
         return frame.filter(pl.col(TENANT_COL) == self.tenant_id)

@@ -89,6 +89,22 @@ def test_unknown_table_is_rejected(root: Path) -> None:
         store.reference("sales")
 
 
+def test_missing_optional_table_reads_as_empty(root: Path) -> None:
+    store = AsOfStore(root=root, tenant_id=TENANT, as_of=AS_OF)
+    for table in ("stock_snapshot", "purchase_order", "external_forecast"):
+        frame = store.facts(table).collect()
+        assert frame.height == 0
+        assert frame.columns[0] == "tenant_id"
+
+
+def test_missing_required_table_names_it(root: Path) -> None:
+    store = AsOfStore(root=root, tenant_id=TENANT, as_of=AS_OF)
+    with pytest.raises(FileNotFoundError, match="no 'price' table"):
+        store.facts("price").collect()
+    with pytest.raises(FileNotFoundError, match="no 'sku' table"):
+        store.reference("sku")
+
+
 @given(offset=st.integers(min_value=-30, max_value=N_DAYS + 30))
 def test_no_row_is_ever_dated_after_as_of(root: Path, offset: int) -> None:
     as_of = START + timedelta(days=offset)

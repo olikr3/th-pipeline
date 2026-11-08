@@ -5,6 +5,7 @@ from pathlib import Path
 
 from thp.core.asof import AsOfStore
 from thp.core.config import load_settings
+from thp.core.paths import DATA_ENV, data_root
 from thp.demand.baseline import seasonal_naive
 from thp.demand.external import external_forecast
 from thp.demand.forecast import write_forecast
@@ -17,20 +18,23 @@ from thp.simulate.assemble import LotRequest
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(prog="thp")
+    data = data_root()
+    parser = argparse.ArgumentParser(
+        prog="thp", epilog=f"Data paths default to {data} (set {DATA_ENV} to change)."
+    )
     commands = parser.add_subparsers(dest="command", required=True)
 
     m5 = commands.add_parser("ingest-m5", help="convert the M5 CSVs into canonical Parquet")
-    m5.add_argument("--raw", type=Path, default=Path("data/raw/m5"))
-    m5.add_argument("--out", type=Path, default=Path("data/canonical"))
+    m5.add_argument("--raw", type=Path, default=data / "raw/m5")
+    m5.add_argument("--out", type=Path, default=data / "canonical")
     m5.add_argument("--stores", nargs="+", help="only these store ids, e.g. CA_1")
     m5.add_argument("--config", type=Path, action="append", default=[], help="YAML layer(s)")
 
     features = commands.add_parser("build-features", help="write the weekly demand feature panel")
     features.add_argument("--tenant", required=True)
     features.add_argument("--as-of", type=date.fromisoformat, required=True)
-    features.add_argument("--canonical", type=Path, default=Path("data/canonical"))
-    features.add_argument("--out", type=Path, default=Path("data/features"))
+    features.add_argument("--canonical", type=Path, default=data / "canonical")
+    features.add_argument("--out", type=Path, default=data / "features")
     features.add_argument("--latest-only", action="store_true", help="only the last week")
     features.add_argument("--config", type=Path, action="append", default=[], help="YAML layer(s)")
 
@@ -43,7 +47,7 @@ def main() -> None:
     ingest_fc.add_argument(
         "--issued", type=date.fromisoformat, help="issue date, if the file has no issued_date"
     )
-    ingest_fc.add_argument("--canonical", type=Path, default=Path("data/canonical"))
+    ingest_fc.add_argument("--canonical", type=Path, default=data / "canonical")
     ingest_fc.add_argument("--config", type=Path, action="append", default=[], help="YAML layer(s)")
 
     forecast = commands.add_parser("forecast", help="write demand quantiles for the next weeks")
@@ -54,27 +58,30 @@ def main() -> None:
         default=BASELINE,
         help=f"{BASELINE!r} (seasonal naive) or the name of an ingested external source",
     )
-    forecast.add_argument("--canonical", type=Path, default=Path("data/canonical"))
-    forecast.add_argument("--out", type=Path, default=Path("data/forecasts"))
+    forecast.add_argument("--canonical", type=Path, default=data / "canonical")
+    forecast.add_argument("--out", type=Path, default=data / "forecasts")
     forecast.add_argument("--config", type=Path, action="append", default=[], help="YAML layer(s)")
 
     demo = commands.add_parser("make-demo", help="generate the synthetic demo tenant and lots")
-    demo.add_argument("--canonical", type=Path, default=Path("data/canonical"))
-    demo.add_argument("--lots", type=Path, default=Path("data/demo/lots"))
+    demo.add_argument("--canonical", type=Path, default=data / "canonical")
+    demo.add_argument("--lots", type=Path, default=data / "demo/lots")
     demo.add_argument("--skus", type=int, default=DemoSpec.n_skus)
     demo.add_argument("--weeks", type=int, default=DemoSpec.weeks, help="weeks of history")
     demo.add_argument("--seed", type=int, default=DemoSpec.seed)
     demo.add_argument("--config", type=Path, action="append", default=[], help="YAML layer(s)")
 
     score = commands.add_parser("score-lot", help="score a lot request (JSON) and print the result")
-    score.add_argument("lot", type=Path, help="lot request JSON, as written by make-demo")
+    score.add_argument(
+        "lot", type=Path, help="lot request JSON, or the name of a lot in --lots (po_disciplined)"
+    )
+    score.add_argument("--lots", type=Path, default=data / "demo/lots", help="for lot names")
     score.add_argument("--tenant", required=True)
     score.add_argument(
         "--source",
         default=BASELINE,
         help=f"{BASELINE!r} (seasonal naive) or the name of an ingested external source",
     )
-    score.add_argument("--canonical", type=Path, default=Path("data/canonical"))
+    score.add_argument("--canonical", type=Path, default=data / "canonical")
     score.add_argument("--config", type=Path, action="append", default=[], help="YAML layer(s)")
 
     serve = commands.add_parser("mcp", help="serve the engine's commands as an MCP server")
@@ -83,10 +90,10 @@ def main() -> None:
     )
     serve.add_argument("--host", default="127.0.0.1", help="streamable-http only")
     serve.add_argument("--port", type=int, default=8000, help="streamable-http only")
-    serve.add_argument("--canonical", type=Path, default=Path("data/canonical"))
-    serve.add_argument("--features", type=Path, default=Path("data/features"))
-    serve.add_argument("--forecasts", type=Path, default=Path("data/forecasts"))
-    serve.add_argument("--lots", type=Path, default=Path("data/demo/lots"))
+    serve.add_argument("--canonical", type=Path, default=data / "canonical")
+    serve.add_argument("--features", type=Path, default=data / "features")
+    serve.add_argument("--forecasts", type=Path, default=data / "forecasts")
+    serve.add_argument("--lots", type=Path, default=data / "demo/lots")
     serve.add_argument("--config", type=Path, action="append", default=[], help="YAML layer(s)")
 
     args = parser.parse_args()
@@ -144,7 +151,10 @@ def main() -> None:
             path.write_text(json.dumps(lot, indent=2) + "\n")
             print(f"{'lot':>15}: {path}")
     elif args.command == "score-lot":
-        request = LotRequest.model_validate_json(args.lot.read_text())
+        lot_file = args.lot
+        if not lot_file.exists() and lot_file.parent == Path() and not lot_file.suffix:
+            lot_file = args.lots / f"{lot_file}.json"
+        request = LotRequest.model_validate_json(lot_file.read_text())
         n_paths = request.options.n_paths
         overrides = {"simulate": {"n_paths": n_paths}} if n_paths else {}
         run_settings = load_settings(*args.config, overrides)

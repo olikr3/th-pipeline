@@ -4,18 +4,21 @@ The inventory risk engine: canonical data, demand features, demand forecasts, an
 
 ## Setup
 
-The repo root is a uv workspace with `thp/` as its member, so commands work from the root or from `thp/`. The lockfile (`uv.lock`) and `.venv` live at the root. Paths such as `data/` are relative to where you run the command.
+The `uv` project lives in `thp/`; run the commands below from there. From the repo root, use `uv run --project thp thp ...` instead.
 
 ```
+cd thp
 uv sync
 uv run pytest          # also: uv run ruff check, uv run ruff format --check, uv run mypy
 ```
 
-Configuration is layered YAML: `configs/default.yaml`, then any `--config` files, later layers winning.
+Data lives in `data/` at the repo root, whichever directory you run from (`thp --help` prints the path). Set `THP_DATA` to use another directory, or pass a command's path flags (`--canonical`, `--out`, ...).
+
+Settings default to the values in `configs/default.yaml`. They are built in, so the file is for reference; `--config` YAML files layer on top, later layers winning.
 
 ## Commands
 
-All data lives under `data/` by default: `data/canonical/` for canonical tables, `data/features/` and `data/forecasts/` for engine output.
+All data lives under the data root (`data/` at the repo root by default): `data/canonical/` for canonical tables, `data/features/` and `data/forecasts/` for engine output.
 
 | Command | Does |
 | --- | --- |
@@ -25,7 +28,7 @@ All data lives under `data/` by default: `data/canonical/` for canonical tables,
 | `thp ingest-forecasts --tenant T --source S --file F [--issued D]` | Loads forecasts from another source into canonical Parquet |
 | `thp forecast --tenant T --as-of D --source S` | Writes forecasts from source `S`, re-based onto `as_of` |
 | `thp make-demo [--skus N --weeks W --seed S]` | Generates the synthetic demo tenant `demo` and three lot requests in `data/demo/lots/` |
-| `thp score-lot LOT.json --tenant T [--source S]` | Scores a lot request: forecast, simulate, advance; prints JSON |
+| `thp score-lot LOT --tenant T [--source S]` | Scores a lot request (a JSON file, or the name of a demo lot): forecast, simulate, advance; prints JSON |
 | `thp mcp [--transport streamable-http --port P]` | Serves these commands as an MCP server (see below) |
 
 `--as-of` is the date the computation pretends to be at: only data dated on or before it is read. Horizon 1 is the week after `as_of`'s last complete week.
@@ -34,9 +37,9 @@ All data lives under `data/` by default: `data/canonical/` for canonical tables,
 
 ```
 uv run thp make-demo
-uv run thp score-lot data/demo/lots/po_disciplined.json --tenant demo
-uv run thp score-lot data/demo/lots/po_overbought.json --tenant demo
-uv run thp score-lot data/demo/lots/stock_slow_movers.json --tenant demo
+uv run thp score-lot po_disciplined --tenant demo
+uv run thp score-lot po_overbought --tenant demo
+uv run thp score-lot stock_slow_movers --tenant demo
 ```
 
 `make-demo` writes a synthetic merchant (40 SKUs, two locations, three years) with every canonical table, including weekly stock snapshots and purchase orders that M5 lacks. Demand is seasonal and partly intermittent with shared shocks; an order-up-to buyer with disciplined, average and overbuying SKUs creates real stock-outs and excess stock. See `src/thp/ingest/demo.py`.
@@ -53,7 +56,7 @@ The three lots, as of the demo's last day:
 
 ## MCP server
 
-`thp mcp` exposes the engine to MCP clients (Claude Code, Claude Desktop, agents built on an MCP SDK). It runs over stdio by default, for clients that launch the server themselves, or as a long-running HTTP server with `--transport streamable-http` (endpoint `http://127.0.0.1:8000/mcp`; `--host`, `--port`). Data paths (`--canonical`, `--features`, `--forecasts`, `--lots`) and `--config` layers are fixed at start-up and resolved against the directory the server starts in.
+`thp mcp` exposes the engine to MCP clients (Claude Code, Claude Desktop, agents built on an MCP SDK). It runs over stdio by default, for clients that launch the server themselves, or as a long-running HTTP server with `--transport streamable-http` (endpoint `http://127.0.0.1:8000/mcp`; `--host`, `--port`). Data paths (`--canonical`, `--features`, `--forecasts`, `--lots`) and `--config` layers are fixed at start-up.
 
 | Tool | Does |
 | --- | --- |
@@ -67,7 +70,7 @@ The three lots, as of the demo's last day:
 
 Engine errors (an unknown SKU, a missing price, a bad upload) come back as tool errors with the engine's message. `ingest-m5` is CLI only.
 
-Register it with Claude Code from the repo root:
+Register it with Claude Code (from the repo root):
 
 ```
 claude mcp add thp -- uv run --project thp thp mcp
@@ -80,8 +83,7 @@ or in a client's JSON config:
   "mcpServers": {
     "thp": {
       "command": "uv",
-      "args": ["run", "--project", "/path/to/th-pipeline/thp", "thp", "mcp"],
-      "cwd": "/path/to/th-pipeline"
+      "args": ["run", "--project", "/path/to/th-pipeline/thp", "thp", "mcp"]
     }
   }
 }
