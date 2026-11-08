@@ -8,6 +8,8 @@ server can see.
 """
 
 import json
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import date
 from pathlib import Path
 from typing import Annotated, Any
@@ -15,7 +17,7 @@ from typing import Annotated, Any
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
-from pydantic import Field, ValidationError
+from pydantic import Field
 
 from thp.core.asof import AsOfStore
 from thp.core.config import Settings, load_settings
@@ -76,7 +78,9 @@ def build_server(
         return sorted(p.name for p in root.iterdir() if p.is_dir()) if root.is_dir() else []
 
     @server.tool(name="score_lot", annotations=_READS)
-    def score_lot_tool(lot: LotRequest, tenant_id: Tenant, source: Source = BASELINE) -> dict[str, Any]:
+    def score_lot_tool(
+        lot: LotRequest, tenant_id: Tenant, source: Source = BASELINE
+    ) -> dict[str, Any]:
         """Score a lot request: forecast, simulate cash conversion, propose an advance.
 
         Returns the lot cost, cash-ratio quantiles at 30/60/90 days and the tenor,
@@ -174,12 +178,10 @@ def _forecast(store: AsOfStore, settings: Settings, source: str, out: Path) -> d
     }
 
 
-class _tool_errors:
+@contextmanager
+def _tool_errors() -> Iterator[None]:
     """Turn the engine's input errors into tool errors the client sees in full."""
-
-    def __enter__(self) -> None:
-        return None
-
-    def __exit__(self, kind: type[BaseException] | None, exc: BaseException | None, tb: Any) -> None:
-        if isinstance(exc, ValidationError | ValueError | KeyError | FileNotFoundError):
-            raise ToolError(str(exc)) from exc
+    try:
+        yield
+    except (ValueError, KeyError, FileNotFoundError) as exc:
+        raise ToolError(str(exc)) from exc

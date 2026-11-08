@@ -77,7 +77,22 @@ def main() -> None:
     score.add_argument("--canonical", type=Path, default=Path("data/canonical"))
     score.add_argument("--config", type=Path, action="append", default=[], help="YAML layer(s)")
 
+    serve = commands.add_parser("mcp", help="serve the engine's commands as an MCP server")
+    serve.add_argument(
+        "--transport", choices=["stdio", "streamable-http"], default="stdio", help="default: stdio"
+    )
+    serve.add_argument("--host", default="127.0.0.1", help="streamable-http only")
+    serve.add_argument("--port", type=int, default=8000, help="streamable-http only")
+    serve.add_argument("--canonical", type=Path, default=Path("data/canonical"))
+    serve.add_argument("--features", type=Path, default=Path("data/features"))
+    serve.add_argument("--forecasts", type=Path, default=Path("data/forecasts"))
+    serve.add_argument("--lots", type=Path, default=Path("data/demo/lots"))
+    serve.add_argument("--config", type=Path, action="append", default=[], help="YAML layer(s)")
+
     args = parser.parse_args()
+    if args.command == "mcp":
+        _serve_mcp(args)
+        return
     settings = load_settings(*args.config)
     if args.command == "ingest-m5":
         counts = build_m5(args.raw, args.out, settings.m5, stores=args.stores)
@@ -135,3 +150,19 @@ def main() -> None:
         run_settings = load_settings(*args.config, overrides)
         scored = score_lot(args.canonical, args.tenant, request, run_settings, args.source)
         print(json.dumps(scored, indent=2))
+
+
+def _serve_mcp(args: argparse.Namespace) -> None:
+    from thp.mcp_server import build_server  # the MCP SDK is only needed here
+
+    server = build_server(
+        canonical=args.canonical.resolve(),
+        features=args.features.resolve(),
+        forecasts=args.forecasts.resolve(),
+        lots=args.lots.resolve(),
+        config=tuple(args.config),
+    )
+    if args.transport == "stdio":
+        server.run("stdio")
+    else:
+        server.run("streamable-http", host=args.host, port=args.port)
