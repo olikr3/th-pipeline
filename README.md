@@ -26,6 +26,7 @@ All data lives under `data/` by default: `data/canonical/` for canonical tables,
 | `thp forecast --tenant T --as-of D --source S` | Writes forecasts from source `S`, re-based onto `as_of` |
 | `thp make-demo [--skus N --weeks W --seed S]` | Generates the synthetic demo tenant `demo` and three lot requests in `data/demo/lots/` |
 | `thp score-lot LOT.json --tenant T [--source S]` | Scores a lot request: forecast, simulate, advance; prints JSON |
+| `thp mcp [--transport streamable-http --port P]` | Serves these commands as an MCP server (see below) |
 
 `--as-of` is the date the computation pretends to be at: only data dated on or before it is read. Horizon 1 is the week after `as_of`'s last complete week.
 
@@ -49,6 +50,42 @@ The three lots, as of the demo's last day:
 | `stock_slow_movers` | stock financing of on-hand stock covering over 20 weeks | 60 days |
 
 `score-lot` prints the lot cost, the cash-ratio quantiles at 30/60/90 days, P(cash ratio < 1), expected unsold value, and the advance: q05 of the cash ratio at the tenor × lot cost ÷ (1 + fee), capped at 80% of cost. The decision rules (decline, reduce, refer) are not built yet, so every lot gets an advance amount, however small. A lot request is the spec's API request as JSON; add `"options": {"n_paths": 500, "seed": 1}` to change the run.
+
+## MCP server
+
+`thp mcp` exposes the engine to MCP clients (Claude Code, Claude Desktop, agents built on an MCP SDK). It runs over stdio by default, for clients that launch the server themselves, or as a long-running HTTP server with `--transport streamable-http` (endpoint `http://127.0.0.1:8000/mcp`; `--host`, `--port`). Data paths (`--canonical`, `--features`, `--forecasts`, `--lots`) and `--config` layers are fixed at start-up and resolved against the directory the server starts in.
+
+| Tool | Does |
+| --- | --- |
+| `list_tenants` | Tenants with canonical data |
+| `score_lot(lot, tenant_id, source="baseline")` | Same as `score-lot`; `lot` is the lot request JSON as an object |
+| `forecast(tenant_id, as_of, source="baseline")` | Same as `forecast`; returns the series and row counts and the output path |
+| `build_features(tenant_id, as_of, latest_only=false)` | Same as `build-features` |
+| `ingest_forecasts(tenant_id, source, file, issued=null)` | Same as `ingest-forecasts`; `file` is a path on the server |
+| `make_demo(skus, weeks, seed)` | Same as `make-demo` |
+| `list_demo_lots`, `get_demo_lot(name)` | The example lots `make-demo` wrote, ready for `score_lot` |
+
+Engine errors (an unknown SKU, a missing price, a bad upload) come back as tool errors with the engine's message. `ingest-m5` is CLI only.
+
+Register it with Claude Code from the repo root:
+
+```
+claude mcp add thp -- uv run --project thp thp mcp
+```
+
+or in a client's JSON config:
+
+```json
+{
+  "mcpServers": {
+    "thp": {
+      "command": "uv",
+      "args": ["run", "--project", "/path/to/th-pipeline/thp", "thp", "mcp"],
+      "cwd": "/path/to/th-pipeline"
+    }
+  }
+}
+```
 
 ## Forecasts from another source
 
@@ -96,4 +133,5 @@ src/thp/
   simulate/  cash-conversion simulator: demand sampling, copula, engine, lot assembly
   underwrite/ advance amount
   scoring.py  forecast -> assemble -> simulate -> advance
+  mcp_server.py  the commands as MCP tools
 ```
